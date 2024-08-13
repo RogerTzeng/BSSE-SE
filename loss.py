@@ -11,7 +11,7 @@ class DPTLoss(nn.Module):
         
         self.L2loss  = nn.MSELoss()
         self.L1loss  = nn.L1Loss()
-        self.nn_stft = ConvSTFT(512, 256, 512, 'hanning', 'real', fix=True)
+        self.nn_stft = ConvSTFT(512, 256, 512, 'hamming', 'real', fix=True)
 
     def forward(self, pred, cdata):
         

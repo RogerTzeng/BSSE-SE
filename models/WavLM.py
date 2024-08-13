@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
-from models.modules import (
+from BSSE_SE.models.modules import (
     Fp32GroupNorm,
     Fp32LayerNorm,
     GradMultiply,
@@ -348,7 +348,6 @@ class WavLM(nn.Module):
 
         if padding_mask is not None:
             padding_mask = self.forward_padding_mask(features, padding_mask)
-
         if self.post_extract_proj is not None:
             features = self.post_extract_proj(features)
 

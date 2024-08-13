@@ -1,5 +1,6 @@
 import torch, importlib, fairseq
 import torch.nn as nn
+from transformers import AutoModel, AutoConfig
 # from unilm.wavlm.WavLM import WavLM, WavLMConfig 
 from models.WavLM import WavLM, WavLMConfig 
 from util import get_feature, feature_to_wav
@@ -25,6 +26,7 @@ class SE_module(nn.Module):
                 cfg.encoder_layerdrop = 0
                 self.model_SSL = WavLM(cfg)
                 self.model_SSL.load_state_dict(checkpoint['model'])
+                # self.model_SSL = AutoModel.from_pretrained('microsoft/'+ args.ssl_model + '-'+args.size)
             else:
                 model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task( [ssl_path],arg_overrides={'encoder_layerdrop':0})
                 self.model_SSL = model[0]
@@ -50,6 +52,7 @@ class SE_module(nn.Module):
             if self.args.ssl_model=='wavlm':
                 rep, layer_results = self.model_SSL(wav, output_layer=self.model_SSL.cfg.encoder_layers, ret_layer_results=True)[0]
                 layer_reps = [x.transpose(0, 1) for x, _ in layer_results]
+                # layer_reps = self.model_SSL(wav, output_hidden_states=True)['hidden_states']
             else:
                 layer_results = self.model_SSL(wav, mask=False, features_only=True)['layer_results']
                 layer_reps = [x.transpose(0, 1) for x, _, _ in layer_results]

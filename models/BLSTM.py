@@ -1,9 +1,8 @@
 import torch, pdb
 import torch.nn as nn
 # from unilm.wavlm.WavLM import WavLM, WavLMConfig 
-from models.WavLM import WavLM, WavLMConfig 
-import fairseq
-from util import get_feature, feature_to_wav
+from BSSE_SE.models.WavLM import WavLM, WavLMConfig 
+from BSSE_SE.util import get_feature, feature_to_wav
 
 
 class _Blstm(nn.Module):
@@ -41,7 +40,7 @@ class BLSTM(nn.Module):
             embed = self.dim
         else:
             embed = 201+self.dim
-            
+        
         self.lstm_enc = nn.Sequential(
             nn.Linear(embed, 256, bias=True),
             _Blstm(input_size=256, hidden_size=256, num_layers=2),
@@ -89,3 +88,61 @@ def MainModel(args):
     model = BLSTM(args)
     
     return model
+
+
+class BLSTM_multi(nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+        self.transform = get_feature()
+
+        self.dim = 1024
+        weight_dim = 25
+        
+        self.weights = nn.Parameter(torch.ones(weight_dim))
+        self.softmax = nn.Softmax(-1)
+        layer_norm  = []
+        for _ in range(weight_dim):
+            layer_norm.append(nn.LayerNorm(self.dim))
+        self.layer_norm = nn.Sequential(*layer_norm)
+            
+        
+        embed = 201+self.dim
+        
+        self.lstm_enc = nn.Sequential(
+            nn.Linear(embed, 256, bias=True),
+            _Blstm(input_size=256, hidden_size=256, num_layers=2),
+            nn.Linear(256, 201, bias=True),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, wav, layer_reps, output_wav=False, layer_norm=True):
+        
+#         generate log1p
+        (log1p,_phase),_len = self.transform(wav,ftype='log1p')
+#         generate SSL feature
+        
+        ssl = torch.cat(layer_reps,2)
+        
+        B,T,embed_dim = ssl.shape
+        ssl = ssl.repeat(1,1,2).reshape(B,-1,embed_dim)
+        ssl = torch.cat((ssl,ssl[:,-1:].repeat(1,log1p.shape[2]-ssl.shape[1],1)),dim=1)
+        
+        lms  = torch.split(ssl, self.dim, dim=2)
+        for i,(lm,layer,weight) in enumerate(zip(lms,self.layer_norm,self.softmax(self.weights))):
+            if layer_norm:
+                lm = layer(lm)
+            if i==0:
+                out = lm*weight
+            else:
+                out = out+lm*weight
+        x    = torch.cat((log1p.transpose(1,2),out),2) 
+        
+        out = self.lstm_enc(x).transpose(1,2)
+        
+        out = out*log1p
+        
+        if output_wav:
+            out = feature_to_wav((out,_phase),_len)
+
+        return out

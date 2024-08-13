@@ -1,6 +1,6 @@
 import torch, os, numpy as np, random, torchaudio
 import torch.nn as nn
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
 from util import get_filepaths
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
@@ -22,10 +22,10 @@ def Load_model(args,model,checkpoint_path,model_path):
     criterion = criterion[args.loss_fn].to(device)
     if args.feature!='log1p':
         optimizers = {
-            'adam'    : Adam([
+            'adamw'    : AdamW([
                 {'params': model.model_SE.parameters()},
-                {'params': model.model_SSL.parameters(), 'lr': args.lr*0.1}
-            ],lr=args.lr,weight_decay=0)}
+                {'params': model.model_SSL.parameters(), 'lr': args.lr*0.5}
+            ],lr=args.lr,weight_decay=0.009)}
     else:
         optimizers = {
             'adam'    : Adam(model.parameters(),lr=args.lr,weight_decay=0)}
@@ -59,14 +59,21 @@ class CustomDataset(Dataset):
         self.max_audio     = length*hop_length
         self.val           = val
         self.weighted_sum  = args.weighted_sum
+        # self.clean_mean    = -3.0302437748590976e-05 
+        # self.clean_std     = 0.06215898035479483
+        self.noisy_mean    = -0.00016752422864340985
+        self.noisy_std     = 0.09842836134288799
 
     def load_audio(self,path,):
 
         wav    = torchaudio.load(path)[0]
+        wav    = (wav - self.noisy_mean)/self.noisy_std
+
         cpath  = os.path.join(self.cpath,path.split('/')[-1])
         cwav   = torchaudio.load(cpath)[0]
-        frame  = wav.shape[1]//160+1
+        cwav   = (cwav - self.noisy_mean)/self.noisy_std
         
+        frame  = wav.shape[1]//160+1
         if wav.shape[0]!=1:
             i = torch.randperm(wav.shape[0])[0]
             wav  = wav[i:i+1]
@@ -76,7 +83,7 @@ class CustomDataset(Dataset):
             time = self.max_audio//wav.shape[-1]+1
             wav  = wav.repeat(1,time)
             cwav = cwav.repeat(1,time)
-
+        
         start   = torch.randint(0,(wav.shape[1]-self.max_audio),(1,))
         n_audio = wav[0,start : start + self.max_audio]
         c_audio = cwav[0,start : start + self.max_audio]
@@ -86,6 +93,8 @@ class CustomDataset(Dataset):
         else:
             scale = torch.rand(1)*1.5+1
             return n_audio*scale, c_audio*scale
+
+        # return n_audio, c_audio
 
     def __getitem__(self, index):
         npath = self.paths[index]

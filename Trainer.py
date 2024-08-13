@@ -39,6 +39,7 @@ class Trainer:
             for name,param in self.model.model_SSL.named_parameters():
                 param.requires_grad = False         
         if args.finetune_SSL=='PF':
+            # self.model.model_SSL.freeze_feature_encoder()
             for name,param in self.model.model_SSL.feature_extractor.named_parameters():
                 param.requires_grad = False            
 
@@ -127,6 +128,14 @@ class Trainer:
         n_data,sr = torchaudio.load(test_file)
         c_data,sr = torchaudio.load(c_file)
 
+        # clean_mean    = -3.0302437748590976e-05 
+        # clean_std     = 0.06215898035479483
+        noisy_mean    = -0.00016752422864340985
+        noisy_std     = 0.09842836134288799
+        
+        n_data = (n_data-noisy_mean)/noisy_std
+        c_data = (c_data-noisy_mean)/noisy_std
+
         enhanced  = self.model(n_data.to(self.device),output_wav=True)
         out_path = f'./Enhanced/{self.model.__class__.__name__}_{args.ssl_model}_{args.target}_epochs{args.epochs}' \
                     f'_{args.optim}_{args.loss_fn}_batch{args.batch_size}_'\
@@ -135,6 +144,9 @@ class Trainer:
                     
         check_folder(out_path)
         enhanced = enhanced.cpu()
+        enhanced = enhanced*noisy_std + noisy_mean
+        c_data = c_data*noisy_std + noisy_mean
+        
         torchaudio.save(out_path,enhanced,sr)
             
         s_pesq, s_stoi = cal_score(c_data.squeeze().detach().numpy(),enhanced.squeeze().detach().numpy())

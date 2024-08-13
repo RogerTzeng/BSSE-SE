@@ -1,3 +1,7 @@
 __pycache__/
 models/__pycache__
 models/.ipynb_checkpoints/
+Enhanced/
+logs/
+Result/
+save_model/
