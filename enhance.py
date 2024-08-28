@@ -31,103 +31,106 @@ def get_args():
     parser.add_argument('--checkpoint', type=str, default=None)
     args = parser.parse_args()
     return args
+test_set_list = ['NoisyAudiosTest1_0_free', 'NoisyAudiosTest1_5_free', 'NoisyAudiosTest1_10_free']
+# test_set = 'NoisyAudiosTest1_0_free'
 
-test_set = 'NoisyAudiosTest1_mix'
-save_path = '/home/roger/project/EMO/dataset/MSP-PODCAST-Publish-1.11/BSSEAudios'
-if not os.path.exists(save_path):
-    os.makedirs(save_path)
-noisy_audio_paths = sorted(glob('/home/roger/project/EMO/dataset/MSP-PODCAST-Publish-1.11/{}/*'.format(test_set)))
-# noisy_audio_paths = noisy_audio_paths[:1]
-# print(noisy_audio_paths)
+for test_set in test_set_list:
+    save_path = '/home/roger/project/EMO/dataset/MSP-PODCAST-Publish-1.11/{}'.format(test_set.replace('Noisy', 'BSSE'))
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    noisy_audio_paths = sorted(glob('/home/roger/project/EMO/dataset/MSP-PODCAST-Publish-1.11/{}/*'.format(test_set)))
+    # noisy_audio_paths = noisy_audio_paths[:1]
+    # print(noisy_audio_paths)
 
-args = get_args()
-model = SE_module(args)
-model.eval()
-model.cuda()
+    args = get_args()
+    model = SE_module(args)
+    model.eval()
+    model.cuda()
 
-checkpoint = torch.load('./save_model/BLSTM_wavlm_IRM_epochs40_adamw_batch16_lr5e-05_cross_large_WSTrue_FTPF_finetune_MSP_noisy_norm.pth.tar')
-model.load_state_dict(checkpoint['model'])
+    checkpoint = torch.load('./save_model/BLSTM_wavlm_IRM_epochs40_adamw_batch16_lr5e-05_cross_large_WSTrue_FTPF_finetune_MSP_noisy_norm.pth.tar')
+    model.load_state_dict(checkpoint['model'])
 
-noisy_mean    = -0.00016752422864340985
-noisy_std     = 0.09842836134288799
+    noisy_mean    = -0.00016752422864340985
+    noisy_std     = 0.09842836134288799
 
-# def enhance(path):
-#     wav, sample_rate = torchaudio.load(path)
+    def enhance(path):
+        wav, sample_rate = torchaudio.load(path)
+        filename = os.path.basename(path)
+
+        wav = wav.cuda()
+        clean_wav, sample_rate = torchaudio.load(path.replace(test_set, 'Audios'))
+        wav    = (wav - noisy_mean)/noisy_std
+        enhanced_wav = model(wav, output_wav=True)
+
+        wav = (wav*noisy_std) + noisy_mean
+        enhanced_wav = (enhanced_wav*noisy_std) + noisy_mean
+
+        clean_wav = torch.squeeze(clean_wav, 0).numpy()
+        enhanced_wav = torch.squeeze(enhanced_wav, 0).detach().cpu().numpy()
+
+        # metrics = compute_metrics(clean_wav, enhanced_wav, sample_rate, 0)
+        # metrics = compute_metrics(torch.squeeze(clean_wav, 0).numpy(), torch.squeeze(wav, 0).detach().cpu().numpy(), sample_rate, 0)
+        # metrics = np.array(metrics)
+
+        # torchaudio.save('./clean.wav', clean_wav, sample_rate, format='wav')
+        # torchaudio.save('./noisy.wav', wav, sample_rate, format='wav')
+        # torchaudio.save('./enhanced.wav', enhanced_wav, sample_rate, format='wav')
+
+        torchaudio.save(os.path.join(save_path, filename), torch.unsqueeze(torch.from_numpy(enhanced_wav), 0), sample_rate, format='wav')
+        
+        return
+        # return metrics
+
+    for path in tqdm(noisy_audio_paths):
+        enhance(path)
+    # metrics_total = Parallel(n_jobs=16, verbose=50)(delayed(enhance)(path) for path in noisy_audio_paths)
+    # metrics_total = np.array(metrics_total)
+    # metrics_avg = np.mean(metrics_total, axis=0)
+
+
+# metrics_total = np.zeros(6)
+# num = len(noisy_audio_paths)
+# for path in tqdm(noisy_audio_paths):
 #     filename = os.path.basename(path)
-
+#     wav, sample_rate = torchaudio.load(path)
 #     wav = wav.cuda()
 #     clean_wav, sample_rate = torchaudio.load(path.replace(test_set, 'Audios'))
-#     # wav    = (wav - noisy_mean)/noisy_std
-#     # enhanced_wav = model(wav, output_wav=True)
 
-#     # wav = (wav*noisy_std) + noisy_mean
-#     # enhanced_wav = (enhanced_wav*noisy_std) + noisy_mean
+#     wav    = (wav - noisy_mean)/noisy_std
+#     enhanced_wav = model(wav, output_wav=True)
+#     wav = (wav*noisy_std) + noisy_mean
+#     enhanced_wav = (enhanced_wav*noisy_std) + noisy_mean
 
-#     # clean_wav = torch.squeeze(clean_wav, 0).numpy()
-#     # enhanced_wav = torch.squeeze(enhanced_wav, 0).detach().cpu().numpy()
+#     # torchaudio.save('./Enhanced/clean.wav', clean_wav, sample_rate, format='wav')
+#     # torchaudio.save('./Enhanced/noisy.wav', wav.cpu(), sample_rate, format='wav')
+#     # torchaudio.save('./Enhanced/fintuned.wav', enhanced_wav.cpu(), sample_rate, format='wav')
+#     # assert 1==0
 
-#     # metrics = compute_metrics(clean_wav, enhanced_wav, sample_rate, 0)
-#     metrics = compute_metrics(torch.squeeze(clean_wav, 0).numpy(), torch.squeeze(wav, 0).detach().cpu().numpy(), sample_rate, 0)
+#     clean_wav = torch.squeeze(clean_wav, 0).numpy()
+#     enhanced_wav = torch.squeeze(enhanced_wav, 0).detach().cpu().numpy()
+    
+#     metrics = compute_metrics(clean_wav, enhanced_wav, sample_rate, 0)
 
 #     metrics = np.array(metrics)
-
-#     # torchaudio.save('./clean.wav', clean_wav, sample_rate, format='wav')
-#     # torchaudio.save('./noisy.wav', wav, sample_rate, format='wav')
-#     # torchaudio.save('./enhanced.wav', enhanced_wav, sample_rate, format='wav')
-
-#     # torchaudio.save(os.path.join(save_path, filename), torch.unsqueeze(torch.from_numpy(enhanced_wav), 0), sample_rate, format='wav')
-    
-
-#     return metrics
-
-# metrics_total = Parallel(n_jobs=16, verbose=50)(delayed(enhance)(path) for path in noisy_audio_paths)
-# metrics_total = np.array(metrics_total)
-# metrics_avg = np.mean(metrics_total, axis=0)
+#     metrics_total += metrics
 
 
-metrics_total = np.zeros(6)
-num = len(noisy_audio_paths)
-for path in tqdm(noisy_audio_paths):
-    filename = os.path.basename(path)
-    wav, sample_rate = torchaudio.load(path)
-    wav = wav.cuda()
-    clean_wav, sample_rate = torchaudio.load(path.replace(test_set, 'Audios'))
-
-    wav    = (wav - noisy_mean)/noisy_std
-    enhanced_wav = model(wav, output_wav=True)
-    wav = (wav*noisy_std) + noisy_mean
-    enhanced_wav = (enhanced_wav*noisy_std) + noisy_mean
-
-    # torchaudio.save('./Enhanced/clean.wav', clean_wav, sample_rate, format='wav')
-    # torchaudio.save('./Enhanced/noisy.wav', wav.cpu(), sample_rate, format='wav')
-    # torchaudio.save('./Enhanced/fintuned.wav', enhanced_wav.cpu(), sample_rate, format='wav')
-    # assert 1==0
-
-    clean_wav = torch.squeeze(clean_wav, 0).numpy()
-    enhanced_wav = torch.squeeze(enhanced_wav, 0).detach().cpu().numpy()
-    
-    metrics = compute_metrics(clean_wav, enhanced_wav, sample_rate, 0)
-
-    metrics = np.array(metrics)
-    metrics_total += metrics
+# metrics_avg = metrics_total / num
 
 
-metrics_avg = metrics_total / num
-
-
-print("="*20)
-print(test_set)
-print(
-    "pesq: ",
-    metrics_avg[0],
-    "csig: ",
-    metrics_avg[1],
-    "cbak: ",
-    metrics_avg[2],
-    "covl: ",
-    metrics_avg[3],
-    "ssnr: ",
-    metrics_avg[4],
-    "stoi: ",
-    metrics_avg[5],
-)
+# print("="*20)
+# print(test_set)
+# print(
+#     "pesq: ",
+#     metrics_avg[0],
+#     "csig: ",
+#     metrics_avg[1],
+#     "cbak: ",
+#     metrics_avg[2],
+#     "covl: ",
+#     metrics_avg[3],
+#     "ssnr: ",
+#     metrics_avg[4],
+#     "stoi: ",
+#     metrics_avg[5],
+# )
